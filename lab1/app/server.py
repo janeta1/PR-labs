@@ -16,13 +16,13 @@ def get_content_type(filename):
 
 def generate_directory_listing(path, request_path):
     files = os.listdir(path)
-    html = f"<html><body><h2>Directory listing for {request_path}</h2><ul>"
+    html = f"<html>\n<body>\n<h2>Directory listing for {request_path}</h2>\n<ul>\n"
     for f in files:
         full_path = os.path.join(path, f)
         display_name = f + "/" if os.path.isdir(full_path) else f
         href = os.path.join(request_path, f).replace("\\", "/")
-        html += f'<li><a href="{href}">{display_name}</a></li>'
-    html += "</ul></body></html>"
+        html += f'  <li><a href="{href}">{display_name}</a></li>\n'
+    html += "</ul>\n</body>\n</html>\n"
     return html.encode("utf-8")
 
 
@@ -72,10 +72,10 @@ def handle_client(conn, base_dir):
                 conn.sendall(b"HTTP/1.1 500 Internal Server Error\r\n\r\n")
 
         else:
-            body = b"File not found"
+            body = b"<html><h1>404 Not Found</h1></html>"
             header = (
                 "HTTP/1.1 404 Not Found\r\n"
-                "Content-Type: text/plain\r\n"
+                "Content-Type: text/html\r\n"
                 f"Content-Length: {len(body)}\r\n"
                 "\r\n"
             )
