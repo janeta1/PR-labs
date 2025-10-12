@@ -91,7 +91,7 @@ When the client requests a PDF document, the server locates the file in the serv
 The following screenshot shows that the server properly serves PNG image files.
 When the client requests an image, the server responds with the appropriate `image/png` content type, and the image is correctly displayed in the browser.
 
-<img src="./report_images/png_file.png" alt="." width="200">
+<img src="./report_images/png_file.png" alt="." width="600">
 
 ## 5. Client
 
