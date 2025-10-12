@@ -46,7 +46,7 @@ def handle_client(conn, base_dir):
 
         path = path.lstrip('/')
         full_path = os.path.join(base_dir, path)
-
+        print(f"Client requested: {full_path}")
         if os.path.isdir(full_path):
             body = generate_directory_listing(full_path, '/' + path)
             header = (
