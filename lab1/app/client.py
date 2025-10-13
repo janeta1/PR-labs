@@ -25,7 +25,7 @@ def download_my_file(host, port, file, save_dir):
             return False
 
         if "Content-Type: text/html" in headers:
-            print(body.decode(errors='ignore'))
+            print(body.decode("UTF-8"))
         else:
             save_path = os.path.join(save_dir, os.path.basename(file))
             with open(save_path, 'wb') as f:

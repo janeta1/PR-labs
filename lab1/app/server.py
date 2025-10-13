@@ -1,6 +1,7 @@
 import os
 import sys
 import socket
+import time
 
 CONTENT_TYPES = {
     ".html": "text/html",
@@ -28,7 +29,7 @@ def generate_directory_listing(path, request_path):
 
 def handle_client(conn, base_dir):
     try:
-        request = conn.recv(1024).decode()
+        request = conn.recv(1024).decode('utf-8')
         if not request:
             return
 
@@ -37,11 +38,10 @@ def handle_client(conn, base_dir):
 
         if method != "GET":
             response = (
-                "HTTP/1.1 405 Method Not Allowed\r\n"
-                "Allow: GET\r\n"
+                "HTTP/1.1 404 Not Found\r\n"  # changed to 404
                 "\r\n"
             )
-            conn.sendall(response.encode())
+            conn.sendall(response.encode('utf-8'))
             return
 
         path = path.lstrip('/')
@@ -55,7 +55,7 @@ def handle_client(conn, base_dir):
                 f"Content-Length: {len(body)}\r\n"
                 "\r\n"
             )
-            conn.sendall(header.encode() + body)
+            conn.sendall(header.encode('utf-8') + body)
 
         elif os.path.isfile(full_path):
             content_type = get_content_type(full_path)
@@ -67,9 +67,9 @@ def handle_client(conn, base_dir):
                           f"Content-Length: {len(content)}\r\n"
                           "\r\n"
                           )
-                conn.sendall(header.encode() + content)
+                conn.sendall(header.encode('utf-8') + content)
             except:
-                conn.sendall(b"HTTP/1.1 500 Internal Server Error\r\n\r\n")
+                conn.sendall(b"HTTP/1.1 404 Not Found\r\n\r\n")  # changed to 404
 
         else:
             body = b"<html><h1>404 Not Found</h1></html>"
@@ -79,10 +79,17 @@ def handle_client(conn, base_dir):
                 f"Content-Length: {len(body)}\r\n"
                 "\r\n"
             )
-            conn.sendall(header.encode() + body)
-
-    finally:
-        conn.close()  # closing after handling the client
+            conn.sendall(header.encode('utf-8') + body)
+    except Exception as e:
+        print(f"Error handling client: {e}")
+        body = b"<html><h1>404 Not Found</h1></html>"
+        header = (
+            "HTTP/1.1 404 Not Found\r\n"
+            "Content-Type: text/html\r\n"
+            f"Content-Length: {len(body)}\r\n"
+            "\r\n"
+        )
+        conn.sendall(header.encode('utf-8') + body)
 
 
 def run_server(base_dir, host='0.0.0.0', port=8000):
@@ -90,11 +97,12 @@ def run_server(base_dir, host='0.0.0.0', port=8000):
 
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         s.bind((host, port))
-        s.listen(1)
+        s.listen(5)
         while True:
             conn, addr = s.accept()
             print(f"Connection from {addr}")
             handle_client(conn, base_dir)
+            conn.close()
 
 
 if __name__ == "__main__":
