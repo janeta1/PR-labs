@@ -53,7 +53,7 @@ It tells Python to run the `server.py` script with unbuffered output, so any mes
 
 The `collection` directory contains all the files that the server will serve.
 
-<img src="./report_images/collection1.png">
+<img src="./report_images/collection1.png" alt="" width="800">
 
 **collection/** contains:
   - **index.html** – HTML page with a PNG image.  
@@ -70,7 +70,7 @@ The `collection` directory contains all the files that the server will serve.
 The following screenshot demonstrates that the server correctly handles requests for files that do not exist.
 When the client requests a missing file, the server responds with the appropriate `404 Not Found` message.
 
-<img src="./report_images/inexisten_file.png" alt="." width="470">
+<img src="./report_images/inexisten_file.png" alt="." width="800">
 
 ### 4.2. HTML file with Embedded image
 
@@ -106,11 +106,13 @@ This command connects to the server running on `localhost` at port `8000`, reque
 
 ### 5.2. Client Output
 
-Here, we can see the output when requesting an HTML file (which is displayed directly in the console, not downloaded) and when saving a PNG image to the downloads folder.
+Here, we can see the output when requesting an HTML file (which is displayed directly in the console, not downloaded)
 
 <img src="./report_images/client1.png" alt="" width="400">
 
-<img src="./report_images/download2.png" alt="" width="1025">
+and when saving a PNG image to the downloads folder.
+
+<img src="./report_images/download2.png" alt="" width="800">
 
 ### 5.3. Saved files
 
@@ -123,26 +125,43 @@ The PNG and PDF files are saved locally in the specified directory:
 If the client requests a directory instead of a specific file, the server automatically generates a directory listing page.
 This page shows all files and subdirectories contained within the requested folder.
 
-<img src="./report_images/listing3.png" alt="" width="1465">
+<img src="./report_images/listing3.png" alt="" width="500">
+
+<img src="./report_images/listing4.png" alt="" width="500">
+
+<img src="./report_images/listing5.png" alt="" width="500">
+
 
 Here's how the listing looks in the browser:
 
-<img src="./report_images/listing1.png" alt="" width="400">
+<img src="./report_images/listing1.png" alt="" width="600">
 
-<img src="./report_images/listing2.png" alt="" width="300">
+<img src="./report_images/listing2.png" alt="" width="600">
 
 
 ## 7. Browsing friend's Server
 
-Both computers were connected to the same Wi-Fi network, and we opened port 8080 on both machines. I asked my friend for their machine to run the server, then used `ipconfig` on their computer to find its local IP address. I accessed my friend's server by typing their IP address and port into my browser, for example `http://192.168.100.40:8080`, to see the server content. 
+### Friend 1: Daniela Cojocari, FAF-231
+Both computers were connected to the same Wi-Fi network, and we confirmed that port 8080 was open on both machines. We also made sure that the firewall on both laptops would not block the connection. Daniela ran the server on her computer, and we used ipconfig to find her local IP address. By entering her IP address and the port on which the server is hosted (like http://<friend_ip_address>:<friend_port>) in my browser, I was able to access the server and view its content.
+
+<img src="./report_images/friend_download3.jpg" alt="" width="500">
+
+Then, I used my client to download a file from her server. The screenshots below show the command I used and confirm that the download was successful.
+
+<img src="./report_images/friend_download2.png" alt="" width="900"> <img src="./report_images/friend1_download2.png" alt="" width="300">
+
+<img src="./report_images/friend_download1.png" alt="" width="300"> <img src="./report_images/friend1_download2.png" alt="" width="300">
+
+### Friend 2: Anastasia Tiganescu, FAF-231
+
+We connected both computers to the same Wi-Fi network and verified that port 8080 was open on both. We also checked that the firewall on both laptops would not interfere with the connection. Anastasia started the server on her machine, and I used ipconfig to get her local IP address. I accessed the server through my browser and could see the content hosted there.
 
 <img src="./report_images/friend_server.png" alt="" width="500">
 
-Then, I used my client to download a file from their server. The screenshot below shows the command I used with the client and that the file was successfully downloaded from my friend's server.
+Using my client, I downloaded a file from her server. 
 
-<img src="./report_images/friend_download1.png" alt="" width="900">
+<img src="./report_images/friend_download4.png" alt="" width="300"> <img src="./report_images/friend1_download2.png" alt="" width="300">
 
-<img src="./report_images/friend_download2.png" alt="" width="300">
 
 ## 6. Conclusions
 

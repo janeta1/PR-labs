@@ -17,14 +17,157 @@ def get_content_type(filename):
 
 def generate_directory_listing(path, request_path):
     files = os.listdir(path)
-    html = f"<html>\n<body>\n<h2>Directory listing for {request_path}</h2>\n<ul>\n"
+    parent_path = os.path.dirname(request_path.rstrip("/"))
+    if not parent_path:
+        parent_path = "/"
+
+    html = f"""
+    <html>
+    <head>
+        <title>Janeta's Directory</title>
+        <style>
+            body {{
+                background-color: #fff6fa;
+                font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+                color: #4a4a4a;
+                text-align: center;
+                margin: 40px;
+            }}
+            h2 {{
+                color: #e86ca1;
+                margin-bottom: 30px;
+                font-size: 26px;
+            }}
+            table {{
+                margin: 0 auto;
+                border-collapse: collapse;
+                width: 70%;
+                background-color: #fff;
+                border-radius: 12px;
+                overflow: hidden;
+                box-shadow: 0px 2px 8px rgba(0,0,0,0.1);
+            }}
+            th {{
+                background-color: #f9c9d4;
+                color: #4a4a4a;
+                padding: 12px;
+                font-size: 16px;
+                border-bottom: 2px solid #f2a8ba;
+                text-align: left;
+            }}
+            td {{
+                padding: 10px;
+                border-bottom: 1px solid #f2f2f2;
+                text-align: left;
+            }}
+            tr:hover {{
+                background-color: #ffe6ef;
+            }}
+            a {{
+                color: #c84c86;
+                text-decoration: none;
+                font-weight: 500;
+            }}
+            a:hover {{
+                text-decoration: underline;
+                color: #ff69b4;
+            }}
+            footer {{
+                margin-top: 40px;
+                font-size: 14px;
+                color: #888;
+            }}
+        </style>
+    </head>
+    <body>
+        <h2>Janeta's Directory Listing for {request_path}</h2>
+        <table>
+            <tr><th>Name</th><th>Type</th><th>Size</th></tr>
+    """
+
+    # add the "../" link only if not in root
+    if request_path.strip("/") != "":
+        html += f"""
+            <tr>
+                <td><a href="{parent_path}">../</a></td>
+                <td>-</td>
+                <td>-</td>
+            </tr>
+        """
+
+    # list all files and folders
     for f in files:
         full_path = os.path.join(path, f)
-        display_name = f + "/" if os.path.isdir(full_path) else f
         href = os.path.join(request_path, f).replace("\\", "/")
-        html += f'  <li><a href="{href}">{display_name}</a></li>\n'
-    html += "</ul>\n</body>\n</html>\n"
-    return html.encode("utf-8")
+        file_type = "Folder" if os.path.isdir(full_path) else "File"
+        size = "-" if os.path.isdir(full_path) else f"{os.path.getsize(full_path)} bytes"
+        display_name = f + "/" if os.path.isdir(full_path) else f
+        html += f"""
+            <tr>
+                <td><a href="{href}">{display_name}</a></td>
+                <td>{file_type}</td>
+                <td>{size}</td>
+            </tr>
+        """
+
+    html += """
+        </table>
+        <footer>Served with love by Janeta's Server &#128150;</footer>
+    </body>
+    </html>
+    """
+    return html.encode('utf-8')
+
+
+def generate_404_page(request_path):
+    parent_path = os.path.dirname(request_path.rstrip("/")) or "/"
+    html = f"""
+    <html>
+    <head>
+        <title>404 Not Found</title>
+        <style>
+            body {{
+                background-color: #fff6fa;
+                font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+                color: #4a4a4a;
+                text-align: center;
+                margin: 80px;
+            }}
+            h2 {{
+                color: #e86ca1;
+                font-size: 32px;
+                margin-bottom: 20px;
+            }}
+            a {{
+                color: #c84c86;
+                text-decoration: none;
+                font-weight: 500;
+                font-size: 20px;
+            }}
+            a:hover {{
+                text-decoration: underline;
+                color: #ff69b4;
+            }}
+            p {{
+                font-size: 18px;
+                margin-top: 20px;
+            }}
+            footer {{
+                margin-top: 40px;
+                font-size: 14px;
+                color: #888;
+            }}
+        </style>
+    </head>
+    <body>
+        <a href="{parent_path}">&#8592 Go Back</a>
+        <h2>404 Not Found &#128148</h2>
+        <p>The page or file you are looking for does not exist.</p>
+        <footer>Served with love by Janeta's Server &#128150</footer>
+    </body>
+    </html>
+    """
+    return html.encode('utf-8')
 
 
 def handle_client(conn, base_dir):
@@ -37,11 +180,8 @@ def handle_client(conn, base_dir):
         method, path, _ = request_line.split()
 
         if method != "GET":
-            response = (
-                "HTTP/1.1 404 Not Found\r\n"  # changed to 404
-                "\r\n"
-            )
-            conn.sendall(response.encode('utf-8'))
+            response = generate_404_page("/")
+            conn.sendall(response)
             return
 
         path = path.lstrip('/')
@@ -69,10 +209,10 @@ def handle_client(conn, base_dir):
                           )
                 conn.sendall(header.encode('utf-8') + content)
             except:
-                conn.sendall(b"HTTP/1.1 404 Not Found\r\n\r\n")  # changed to 404
+                conn.sendall(generate_404_page(path))  # changed to 404
 
         else:
-            body = b"<html><h1>404 Not Found</h1></html>"
+            body = generate_404_page(path)
             header = (
                 "HTTP/1.1 404 Not Found\r\n"
                 "Content-Type: text/html\r\n"
@@ -82,7 +222,7 @@ def handle_client(conn, base_dir):
             conn.sendall(header.encode('utf-8') + body)
     except Exception as e:
         print(f"Error handling client: {e}")
-        body = b"<html><h1>404 Not Found</h1></html>"
+        body = generate_404_page("/")
         header = (
             "HTTP/1.1 404 Not Found\r\n"
             "Content-Type: text/html\r\n"
@@ -97,7 +237,7 @@ def run_server(base_dir, host='0.0.0.0', port=8000):
 
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         s.bind((host, port))
-        s.listen(5)
+        s.listen(1)
         while True:
             conn, addr = s.accept()
             print(f"Connection from {addr}")
