@@ -1,12 +1,12 @@
 ## 👩‍💻 Author
 **Name:** Janeta Grigoras  
 **Course:** PR Laboratory  
-**Lab:** HTTP Server and Client (Single-threaded)
+**Lab:** HTTP Server (Multi-threaded)
 
 ---
 
 ## 1. Source Directory Contents
-<img src="./report_images/directory_content.png" alt="content" width="250">
+<img src="./report_images/dir1.png" alt="content" width="200">
 
 The source directory contains:
  
@@ -15,140 +15,134 @@ The source directory contains:
   - **cute.png** – PNG image displayed in the HTML file.  
   - **doctor.png** – additional PNG image for testing image requests.  
   - **Books/** – subdirectory with additional files (for nested directory testing).  
-- **downloads/** – directory where the client saves downloaded files from the server.  
-- **friends_downloads/** – directory where files from a friend’s server are stored (bonus task). 
-- **server.py** – the HTTP server script.  
-- **client.py** – the HTTP client script. 
-- **docker-compose.yml** – Docker Compose file.  
+- **server_multi.py** – the updated HTTP server script that can now handle multiple requests at the same time.  
+- **client.py** – the HTTP client script (unchanged). 
+- **docker-compose.yml** – Docker Compose file. 
+- **testing.py** - script for testing concurrent requests.
 - **Dockerfile** – Dockerfile.  
 - **README.md** – this lab report.  
 
 ## 2. Docker Setup
-### 2.1. Dockerfile
-<img src="./report_images/dockerfile.png" alt="dockerfile" width="350">
 
-This sets up Python 3.10, copies the server files into the container, exposes port 8000, and starts the server with the `collection` directory.
+The setup for Docker remains the same as in Laboratory Work 1, with only the name of the container changed and the command that starts the server.
+
+### 2.1. Dockerfile
+
+<img src="./report_images/dockerfile.png" alt="dockerfile" width="300">
 
 ### 2.2. Docker-compose
+
 <img src="./report_images/docker_compose.png" alt="docker_compose" width="300">
 
-Docker Compose makes running the container easier. It builds the image from the Dockerfile, gives the container a name (`http_server_lab1`), and maps port 8000 so we can open the server in a browser. It also connects the local app folder to the container, so any changes to the files are reflected inside the container automatically. Finally, it starts the server with the `collection` directory.
+## 3. Multithreaded server
 
-### 2.3. Starting the container
-To start the server in Docker, we first build and run the container using Docker Compose.
+### 3.1. Approach
 
-<img src="./report_images/starting_container.png" alt="container" width="730">
+In this lab, the HTTP server was modified to handle multiple client connections concurrently using multithreading. Each time a client connects to the server, a new thread is created to handle that specific request. This allows multiple clients to be served at the same time without blocking each other.
 
-This builds the image if it hasn't been built yet and starts the container. The server will now be running and accessible at `http://localhost:8000`. Any changes made to the local app folder will automatically appear inside the container.
+The key part of the implementation is:
 
-### 2.4. Running the server inside the container
+```python
+client_thread = threading.Thread(target=handle_client, args=(conn, base_dir))
+client_thread.start()
+```
 
-The command that runs the server inside the container is:
+Here:
 
-<img src="./report_images/running_container.png" alt="." width="416">
+* `threading.Thread` creates a new thread.
 
-It tells Python to run the `server.py` script with unbuffered output, so any messages appear immediately in the terminal. The script then starts the HTTP server and serves all files from the `collection` directory. Once the server is running, it automatically listens for requests on port 8000 and responds with the requested files.
+* `target=handle_client` specifies the function that will handle the client request.
 
-## 3. Served Directory Contents
+* `args=(conn, base_dir)` passes the connection object and the directory to serve files from.
 
-The `collection` directory contains all the files that the server will serve.
+* `client_thread.start()` starts the thread immediately.
 
-<img src="./report_images/collection1.png">
+### 3.2. Running the server
 
-**collection/** contains:
-  - **index.html** – HTML page with a PNG image.  
-  - **cute.png** – PNG image displayed in the HTML file.  
-  - **doctor.png** – additional PNG image for testing image requests.  
-  - **Books/** – subdirectory with:
-    - **computer-networking-a-top-down-approach-8th-edition.pdf** – networking textbook.
-    - **PBLReports/** – subdirectory with four additional PDF reports.
+Similar to Laboratory Work 1 to run the server we can use either
 
-## 4. File Requests
+```python
+python server_multi.py collection
+```
 
-### 4.1. Nonexistent file (404)
+or 
 
-The following screenshot demonstrates that the server correctly handles requests for files that do not exist.
-When the client requests a missing file, the server responds with the appropriate `404 Not Found` message.
+```python
+docker-compose up --build
+```
 
-<img src="./report_images/inexisten_file.png" alt="." width="470">
+### 3.3. Testing concurrency
 
-### 4.2. HTML file with Embedded image
+To test how the multithreaded server handles multiple requests, I wrote a small Python script that creates several threads, one for each request. Each thread connects to the server, asks for a file, and reads the response. The threads run at the same time, so multiple requests can be processed simultaneously.
 
-When the client requests an HTML page, the server reads the file and responds with the correct `text/html content` type.
-The page is then displayed properly in the browser, including the embedded image it references.
+Results for single-threaded server:
 
-<img src="./report_images/html_file.png" alt="." width="600">
+<img src="./report_images/time_single.png" alt="" width="400">
 
-### 4.3. PDF file
+Results for multithreaded server:
 
-The following screenshot demonstrates that the server correctly handles requests for PDF files.
-When the client requests a PDF document, the server locates the file in the served directory and sends it with the correct Content-Type header (`application/pdf`), allowing the file to be opened or downloaded successfully.
+<img src="./report_images/time_multi.png" alt="" width="400">
 
-<img src="./report_images/pdf_file.png" alt="." width="600">
+Making the server multithreaded clearly improves performance under concurrent load, allowing requests to be processed simultaneously instead of sequentially.
 
-### 4.4. PNG file
+## 4. Request Counter
 
-The following screenshot shows that the server properly serves PNG image files.
-When the client requests an image, the server responds with the appropriate `image/png` content type, and the image is correctly displayed in the browser.
+### 4.1. Naive implementation
 
-<img src="./report_images/png_file.png" alt="." width="600">
+To count how many times each file is requested, I first tried a naive approach using a dictionary. For each request, the server would read the current count, wait a little `(time.sleep(0.1))`, and then increase the count by one:
 
-## 5. Client
+```python
+if full_path not in request_counts:
+            request_counts[full_path] = 0
+        current = request_counts[full_path]
+        time.sleep(0.1)
+        request_counts[full_path] = current + 1
+```
 
-The Python client connects to the server and requests files using the HTTP protocol.
-It takes four arguments: the `server host`, `port number`, the `requested filename`, and the `directory` where the file should be **saved**.
+The `time.sleep(0.1)` was added intentionally to make it easier to see **race conditions** when multiple threads tried to update the same counter at the same time.
+I tested this by requesting the file `cute.png` `10` times. However, in the photo we can see that I got only `1` hits, meaning a race condition has appeared.
 
-### 5.1. Running the client
+<img src="./report_images/racing1.png" alt="" width="300">
 
-<img src="./report_images/client2.png" alt="." width="1036">
+<img src="./report_images/racing2.png" alt="" width="900">
 
-This command connects to the server running on `localhost` at port `8000`, requests the file `cute.png`, and saves it inside the `downloads` folder.
+### 4.2. Thread-safe implementation
 
-### 5.2. Client Output
+To fix the race condition from the naive counter, I used a thread lock `(counter_lock)` to make updates to the request counts thread-safe. Now, when a thread wants to update a counter, it first acquires the lock, ensuring that no other thread can change the counter at the same time:
 
-Here, we can see the output when requesting an HTML file (which is displayed directly in the console, not downloaded) and when saving a PNG image to the downloads folder.
+```python
+with counter_lock:
+    if full_path not in request_counts:
+        request_counts[full_path] = 0
+    request_counts[full_path] += 1
+```
 
-<img src="./report_images/client1.png" alt="" width="400">
+After applying the lock, testing with concurrent requests showed that the counter now always increases correctly. The race condition is gone, and the request count reflects the actual number of hits for each file:
 
-<img src="./report_images/download2.png" alt="" width="1025">
+<img src="./report_images/racing3.png" alt="" width="300">
 
-### 5.3. Saved files
+<img src="./report_images/racing4.png" alt="" width="900">
 
-The PNG and PDF files are saved locally in the specified directory:
+## 5. Rate limiting
 
-<img src="./report_images/download1.png" alt="" width="300">
+### 5.1. Implementation
 
-## 6. Directory Listing
+The server keeps track of how many requests each client IP makes within one second. If the number of requests goes over the limit (5), the server sends back a “429 Too Many Requests” page. 
 
-If the client requests a directory instead of a specific file, the server automatically generates a directory listing page.
-This page shows all files and subdirectories contained within the requested folder.
+<img src="./report_images/many_requests.png" alt="" width="900">
 
-<img src="./report_images/listing3.png" alt="" width="1465">
+I used a lock to make sure that updates to request_times are thread-safe and no two threads modify it at the same time.
 
-Here's how the listing looks in the browser:
+### 5.2. Testing rate limiting
 
-<img src="./report_images/listing1.png" alt="" width="400">
+In the first test, I simulated spamming by sending 10 requests very quickly. The server applied the rate limit correctly, returning 5 successful responses (200 OK) and 5 blocked ones (429 Too Many Requests). Because half of the requests were rejected, the throughput was lower — around 0.79 successful requests per second.
 
-<img src="./report_images/listing2.png" alt="" width="300">
+<img src="./report_images/many_requests1.png" alt="" width="400">
 
+In the second test, I sent the same number of requests but at a slower pace, staying under the rate limit. All 10 requests were successful, and the throughput increased to 1.47 successful requests per second. This shows that the rate limiting mechanism works as intended, limiting excessive traffic while maintaining high performance for normal users.
 
-## 7. Browsing friend's Server
-
-Both computers were connected to the same Wi-Fi network, and we opened port 8080 on both machines. I asked my friend for their machine to run the server, then used `ipconfig` on their computer to find its local IP address. I accessed my friend's server by typing their IP address and port into my browser, for example `http://192.168.100.40:8080`, to see the server content. 
-
-<img src="./report_images/friend_server.png" alt="" width="500">
-
-Then, I used my client to download a file from their server. The screenshot below shows the command I used with the client and that the file was successfully downloaded from my friend's server.
-
-<img src="./report_images/friend_download1.png" alt="" width="900">
-
-<img src="./report_images/friend_download2.png" alt="" width="300">
+<img src="./report_images/many_requests2.png" alt="" width="400">
 
 ## 6. Conclusions
 
-In this lab, I implemented an HTTP server that handles HTML, PNG, and PDF files, including directory listings and 404 errors for missing files. I also created a Python client to request and download files from the server.  
-
-I learned how servers and clients communicate using HTTP, how to manage different file types, and how to handle nested directories. Using Docker made it easier to run the server in a consistent environment.  
-
-This experience will help me understand web servers, file handling, and network communication in future projects, and it gives me practical skills for testing and debugging client-server applications.
-
+From this lab, I learned that multithreading helps a server handle multiple client requests at the same time, making it much faster and more responsive. I also understood how important thread safety is,s without it, shared data like counters can cause race conditions and give wrong results. Rate limiting was another useful concept; it helps control how often clients can send requests and prevents overloading the server. Comparing both types, the multithreaded server clearly performs better than the single-threaded one since it can manage several connections at once. I also improved my practical skills in using threads, synchronization with locks, and implementing rate limiting, similar to what we did in Laboratory Work 1 1.
