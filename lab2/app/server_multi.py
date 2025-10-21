@@ -10,9 +10,9 @@ CONTENT_TYPES = {
     ".png": "image/png"
 }
 
-request_counts = {}
+request_counts_per_file = {}
 counter_lock = threading.Lock()
-request_times = {}
+request_times_per_ip = {}
 RATE_LIMIT = 5
 TIME_WINDOW = 1  # seconds
 
@@ -106,7 +106,7 @@ def generate_directory_listing(path, request_path):
     # list all files and folders
     for f in files:
         full_path = os.path.join(path, f)
-        hits = request_counts.get(full_path, 0)
+        hits = request_counts_per_file.get(full_path, 0)
         # print(f"FOR {full_path}")
         href = os.path.join(request_path, f).replace("\\", "/")
         file_type = "Folder" if os.path.isdir(full_path) else "File"
@@ -238,18 +238,18 @@ def generate_429_page(request_path):
     return html.encode('utf-8')
 
 
-def handle_client(conn, base_dir):
+def handle_client(conn, addr, base_dir):
     try:
-        client_ip = conn.getpeername()[0]
+        client_ip = addr[0]
         now = time.time()
 
         with counter_lock:
-            if client_ip not in request_times:
-                request_times[client_ip] = []
+            if client_ip not in request_times_per_ip:
+                request_times_per_ip[client_ip] = []
 
-            request_times[client_ip] = [t for t in request_times[client_ip] if now - t < TIME_WINDOW]
+            request_times_per_ip[client_ip] = [t for t in request_times_per_ip[client_ip] if now - t < TIME_WINDOW]
 
-            if len(request_times[client_ip]) >= RATE_LIMIT:
+            if len(request_times_per_ip[client_ip]) >= RATE_LIMIT:
                 body = generate_429_page("/")
                 header = (
                     "HTTP/1.1 429 Too Many Requests\r\n"
@@ -258,7 +258,7 @@ def handle_client(conn, base_dir):
                     "\r\n"
                 )
                 conn.sendall(header.encode("utf-8") + body)
-            request_times[client_ip].append(now)
+            request_times_per_ip[client_ip].append(now)
 
         request = conn.recv(1024).decode()
         time.sleep(1)
@@ -280,21 +280,21 @@ def handle_client(conn, base_dir):
         full_path = os.path.join(base_dir, path)
         full_path = os.path.normpath(full_path)
         print(f"Client {client_ip} requested: {full_path}")
-        # if full_path not in request_counts:
-        #     request_counts[full_path] = 0
-        # current = request_counts[full_path]
+        # if full_path not in request_counts_per_file:
+        #     request_counts_per_file[full_path] = 0
+        # current = request_counts_per_file[full_path]
         # time.sleep(0.1)
-        # request_counts[full_path] = current + 1  # naive increment
+        # request_counts_per_file[full_path] = current + 1  # naive increment
 
         with counter_lock:
-            if full_path not in request_counts:
-                request_counts[full_path] = 0
-            # current = request_counts[full_path]
+            if full_path not in request_counts_per_file:
+                request_counts_per_file[full_path] = 0
+            # current = request_counts_per_file[full_path]
             # time.sleep(0.1)
-            # request_counts[full_path] = current + 1
-            request_counts[full_path] += 1
-            # print(f"{full_path} incremented to {request_counts[full_path]}")
-            # print(f"ALL the hits: {request_counts}")
+            # request_counts_per_file[full_path] = current + 1
+            request_counts_per_file[full_path] += 1
+            # print(f"{full_path} incremented to {request_counts_per_file[full_path]}")
+            # print(f"ALL the hits: {request_counts_per_file}")
         if os.path.isdir(full_path):
             body = generate_directory_listing(full_path, '/' + path)
             header = (
@@ -351,7 +351,7 @@ def run_server(base_dir, host='0.0.0.0', port=8000):
         while True:
             conn, addr = s.accept()
             print(f"Connection from {addr}")
-            client_thread = threading.Thread(target=handle_client, args=(conn, base_dir))
+            client_thread = threading.Thread(target=handle_client, args=(conn, addr, base_dir))
             client_thread.start()
             # handle_client(conn, base_dir)
 
