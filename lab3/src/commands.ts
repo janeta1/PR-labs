@@ -70,7 +70,7 @@ export async function flip(board: Board, playerId: string, row: number, column: 
  *          in the format described in the ps4 handout
  */
 export async function map(board: Board, playerId: string, f: (card: string) => Promise<string>): Promise<string> {
-    await board.map(playerId, f);
+    await board.map(f);
     return board.look(playerId);
 }
 
@@ -85,5 +85,6 @@ export async function map(board: Board, playerId: string, f: (card: string) => P
  *          format described in the ps4 handout
  */
 export async function watch(board: Board, playerId: string): Promise<string> {
-    return board.watch(playerId);
+    await board.watch(playerId);
+    return board.look(playerId);
 }

@@ -5,18 +5,290 @@
 import assert from 'node:assert';
 import fs from 'node:fs';
 import { Board } from '../src/board.js';
-
-// describe('Sanity', function() {
-//   it('runs', function() {
-//     console.log("✅ Mocha is running!");
-//   });
-// });
+import { watch, look, flip, map } from '../src/commands.js';
 
 
 /**
  * Tests for the Board abstract data type.
  */
 describe('Board', function() {
+
+    describe('parseFromFile tests', function() {
+        it('Parses valid board file`s dimensions correctly', async function() {
+            const board = await Board.parseFromFile('boards/perfect.txt');
+            assert.strictEqual(board.getRows(), 3);
+            assert.strictEqual(board.getCols(), 3);
+        });
+
+        it('Rejects invalid dimension line', async function() {
+            await assert.rejects(
+                async () => await Board.parseFromFile('boards/invalid_dim.txt')
+            );
+        });
+
+        it('Rejects when card count does not match dimensions', async function() {
+            await assert.rejects(
+                async () => await Board.parseFromFile('boards/invalid_num_cards.txt')
+            );
+        });
+
+        it('Rejects when a cell line is empty', async function () {
+            await assert.rejects(
+                async () => await Board.parseFromFile('boards/empty_card.txt')
+            );
+        });
+    });
+
+    describe('look() tests', async function () {
+        it('Shows `my` when cards are controlled by the viewer', async function() {
+            const board = await Board.parseFromFile('boards/perfect.txt');
+            await board.flip('alice', 0, 0);
+
+            const aliceView = await board.look('alice');
+            const lines = aliceView.split('\n').slice(1);
+            const card = lines[0];
+            assert(card, 'We should have a card here');
+            assert(card.startsWith('my'), 'The flipped card should be controlled by the player');
+            assert(card.includes('🦄') || card.includes('🌈'), 'The flipped card should show a valid symbol');
+
+            const count = lines.filter(l => l.startsWith('my')).length;
+            assert.strictEqual(count, 1, 'Exactly one card should be shown as "my" to alice');
+            
+        });
+
+        it('Shows `up` for face-up cards controlled by other players', async function() {
+            const board = await Board.parseFromFile('boards/perfect.txt');
+            await board.flip('alice', 0, 0);
+            const bobView = await board.look('bob');
+
+            const lines = bobView.split('\n').slice(1);
+            const card = lines[0];
+            assert(card, 'We should have a card here');
+            assert(card.startsWith('up'), 'The flipped card should be face up, but not controlled by bob');
+        });
+
+        it('Shows `none` for removed cards', async function() {
+            const board = await Board.parseFromFile('boards/perfect.txt');
+            await board.flip('alice', 0, 0);
+            await board.flip('alice', 0, 1); // match
+
+            await board.flip('alice', 1, 0); // remove matched cards
+
+            const view = await board.look('alice');
+            const lines = view.split('\n').slice(1);
+            const firstCard = lines[0];
+            const secondCard = lines[1];
+            assert(firstCard, 'We should have a card here');
+            assert.strictEqual(firstCard, 'none', 'The first matched card should be removed');
+            assert(secondCard, 'We should have a card here');
+            assert.strictEqual(secondCard, 'none', 'The second matched card should be removed');
+        });
+    });
+
+    describe('map() tests', function () {
+        it('should apply async map() correctly to face down cards and preserve card states', async function() {
+            const board = await Board.parseFromFile('boards/perfect.txt');  
+            
+            const originalGrid: (string | null)[][] = [];
+            for (let r = 0; r < board.getRows(); r++) {
+                originalGrid[r] = [];
+                for (let c = 0; c < board.getCols(); c++) {
+                    const cell = board.getCell(r, c);
+                    assert(cell !== null, `Cell ${r},${c} should exist`);
+                    originalGrid[r]![c] = cell.value;
+                }
+            }
+
+            const f = async (value: string) => {
+                await new Promise(res => setTimeout(res, 10));
+                if (value === '🦄') return '🍭';
+                return value;
+            };
+
+            await map(board, 'alice', f);
+
+            for (let r = 0; r < board.getRows(); r ++) {
+                for (let c = 0; c< board.getCols(); c++) {
+                    const cell = board.getCell(r, c);
+                    assert(cell !== null, `Cell ${r},${c} should exist`);
+                    const expected: string | null = cell.value;
+                    const originalValue = originalGrid[r]![c];
+                    if (originalValue === '🦄') {
+                        assert.strictEqual(expected, '🍭', `Cell ${r},${c} value should be transformed from 🦄 to 🍭`);
+                    } else {
+                        assert.strictEqual(expected, originalValue, `Cell ${r},${c} value should remain unchanged`);
+                    }
+                }
+            } 
+        
+            const view = await board.look('alice');
+            const beforeLines = view.split('\n').slice(1).filter(l => l.trim() !== '');
+            for (const line of beforeLines) {
+                assert.strictEqual(line, 'down', 'All non-empty card lines should remain face down after map()');
+            }
+        });
+
+        it('transforms correctly face up cards', async function () {
+            const board = await Board.parseFromFile('boards/perfect.txt');
+
+            const originalGrid: (string | null)[][] = [];
+            for (let r = 0; r < board.getRows(); r++) {
+                originalGrid[r] = [];
+                for (let c = 0; c < board.getCols(); c++) {
+                    const cell = board.getCell(r, c);
+                    assert(cell !== null, `Cell ${r},${c} should exist`);
+                    originalGrid[r]![c] = cell.value;
+                }
+            }
+
+            const f = async (value: string) => {
+                await new Promise(res => setTimeout(res, 10));
+                if (value === '🌈') return '☀️';
+                return value;
+            };
+
+            await map(board, 'alice', f);
+            await board.flip('alice', 2, 2); // (2,2) is a 🌈 in perfect.tx
+            const cell = board.getCell(2, 2);
+            assert(cell !== null, `Cell 2,2 should exist`);
+            const expected = cell.value;
+            const originalValue = originalGrid[2]![2];
+            if (originalValue === '🌈') {
+                assert.strictEqual(expected, '☀️', `Cell 2,2 value should be transformed from 🌈 to ☀️`)
+            }
+
+            let aliceView = await board.look('alice');
+            let lines = aliceView.split('\n').slice(1).filter(l => l.trim() !== '');
+            const card = lines[8]; 
+            assert(card, 'We should have a card here');
+            assert(card.startsWith('my'), 'The flipped card should be controlled by the player');
+            assert(card.includes('☀️'), 'The flipped card should show the transformed symbol');
+        });
+
+        it('allows multiple map() calls to run concurrently', async function () {
+            const board = await Board.parseFromFile('boards/perfect.txt');
+
+            const f1 = async (value: string) => {
+                await new Promise(res => setTimeout(res, 10));
+                if (value === '🦄') return '🍭';
+                return value;
+            };
+
+            const f2 = async (value: string) => {
+                await new Promise(res => setTimeout(res, 10));
+                if (value === '🦄') return '☀️';
+                return value;  
+            };
+
+            const map1 = map(board, 'alice', f1);
+            const map2 = map(board, 'bob', f2);
+
+            await Promise.all([map1, map2]);
+
+            // Reveal one card to check it was transformed by either map()
+            await board.flip('alice', 0, 0);
+            const view = await board.look('alice');
+            const lines = view.split('\n').slice(1).filter(l => l.trim() !== '');
+            const revealed = lines[0];
+
+            assert(revealed && (revealed.includes('☀️') || revealed.includes('🍭') || revealed.startsWith('my')),
+                'A revealed card should reflect one of the concurrent map transforms or be visible');
+        });
+
+        it('maintains matching pairs consistency during partial async map()', async function () {
+            const board = await Board.parseFromFile('boards/perfect.txt');
+
+            const f = async (value: string) => {
+                await new Promise(res => setTimeout(res, 10));
+                if (value === '🦄') return '🍭';
+                return value;
+            }
+
+            const mapPromise = map(board,'bob', f);
+
+            // Another player flips a card while map is running
+            const flipPromise = flip(board, 'bob', 0, 0);
+
+            await Promise.all([mapPromise, flipPromise]);
+            await flip(board, 'bob', 0, 1); // flip the matching card
+
+            // After flipping the second, both should be controlled by Bob and show the transformed value
+            const view = await look(board, 'bob');
+            const lines = view.split('\n').slice(1).filter(l => l.trim() !== '');
+            const firstCard = lines[0];
+            const secondCard = lines[1];
+
+            assert(firstCard && firstCard.startsWith('my'), 'First card should be controlled by bob');
+            assert(secondCard && secondCard.startsWith('my'), 'Second card should be controlled by bob');
+            assert(firstCard.includes('🍭') && secondCard.includes('🍭'), 'Both cards should have been transformed by map()');
+
+            // Trigger cleanup (bob flips another card) which should remove the matched pair
+            await flip(board, 'bob', 1, 1);
+            const afterCleanup = (await look(board, 'bob')).split('\n').slice(1).filter(l => l.trim() !== '');
+            assert.strictEqual(afterCleanup[0], 'none', 'First matched card should be removed after cleanup');
+            assert.strictEqual(afterCleanup[1], 'none', 'Second matched card should be removed after cleanup');
+
+        });
+    });
+
+    describe('watch() tests', function () {
+        it('should notify when cards are flipped', async function () {
+            const board = await Board.parseFromFile('boards/perfect.txt');
+
+            // watching
+            const watchPromise = watch(board, 'alice');
+            // flipping a card
+            await flip(board, 'alice', 0, 0);
+            const notification = await watchPromise;
+            assert(notification.includes('my'), 'Watch should notify about the flipped card');
+        });
+        
+        it('should notify when cards are removed', async function () {
+            const board = await Board.parseFromFile('boards/perfect.txt');
+
+            // flipping and matching cards to trigger removal
+            await flip(board, 'alice', 0, 0);
+            await flip(board, 'alice', 0, 1); // match
+            // watching
+            const watchPromise = watch(board, 'alice');
+            await flip(board, 'alice', 1, 0); // trigger removal
+            const notification = await watchPromise;
+            assert(notification.includes('none'), 'Watch should notify about the removed cards');
+        });
+
+        it('should notify when cards are transformed by map()', async function () {
+            const board = await Board.parseFromFile('boards/perfect.txt');
+
+            const f = async (value: string) => {
+                await new Promise(res => setTimeout(res, 10));
+                if (value === '🦄') return '🍭';
+                return value;
+            };
+
+            // applying map
+            await map(board, 'alice', f);
+            // watching
+            const watchPromise = watch(board, 'alice');
+            await board.flip('alice', 0, 0); // flip a card to see the transformation
+            const notification = await watchPromise;
+            assert(notification.includes('🍭'), 'Watch should notify about the transformed cards');
+        });
+
+        it('should notify multiple watchers independently', async function () {
+            const board = await Board.parseFromFile('boards/perfect.txt');
+            // watching
+            const watchPromiseAlice = watch(board, 'alice');
+            const watchPromiseBob = watch(board, 'bob');
+
+            // flipping a card
+            await flip(board, 'alice', 0, 0);
+            const notificationAlice = await watchPromiseAlice;
+            const notificationBob = await watchPromiseBob;
+            assert(notificationAlice.includes('my'), 'Alice\'s watch should notify about the flipped card');
+            assert(notificationBob.includes('up'), 'Bob\'s watch should notify about the flipped card');
+        });
+    });
+
 
     describe('Initial Board State', function() {
         it('All cards face down at start', async function() {
@@ -337,20 +609,5 @@ describe('Board', function() {
             assert(firstCardBob, 'We should have a card here for bob');
             assert(firstCardBob.startsWith('my'), 'Bob should control the first card');
         });
-    });
-
-
-
-});
-
-/**
- * Example test case that uses async/await to test an asynchronous function.
- * Feel free to delete these example tests.
- */
-describe('async test cases', function() {
-
-    it('reads a file asynchronously', async function() {
-        const fileContents = (await fs.promises.readFile('boards/ab.txt')).toString();
-        assert(fileContents.startsWith('5x5'));
     });
 });

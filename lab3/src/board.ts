@@ -6,8 +6,7 @@ import assert from 'node:assert';
 import fs from 'node:fs';
 
 /**
- * TODO specification
- * Mutable and concurrency safe.
+ * Represents a cell on the board, along with its value, state, and controlling player (if exists).
  */
 type Cell = {
     value: string | null;
@@ -15,6 +14,9 @@ type Cell = {
     controlledBy: string | null;
 }
 
+/**
+ * Represents a player in the game, including their ID and the cards they have flipped.
+ */
 type Player = {
     id: string;
     firstCard?: { row: number; col: number };
@@ -22,9 +24,21 @@ type Player = {
     hasMatched: boolean;
 }
 
+/**
+ * A resolver function for a promise. It is used to resolve the promise with a value or another promise.
+ */
 type Resolver<T> = (value: T | PromiseLike<T>) => void;
+
+
+/**
+ * A rejector function for a promise. It is used to reject the promise with an error.
+ */
 type Rejector = (reason: Error) => void;
 
+
+/**
+ * A deferred promise that exposes its resolve and reject functions. Used for waiting players.
+ */
 class Deferred<T> {
     public readonly promise: Promise<T>;
     public readonly resolve: Resolver<T>;
@@ -38,7 +52,14 @@ class Deferred<T> {
     }
 }
 
-
+/**
+ * Mutable and concurrency safe.
+ * 
+ * Represents a Memory Scramble game board.  The board consists of a grid of cards,
+ * each of which can be face up or face down, and can be controlled by a player.
+ * Players flip cards to find matching pairs. Multiple players can play concurrently on the same board,
+ * following the rules of the game.
+ */
 export class Board {
     // fields
     private readonly rows: number;
@@ -49,17 +70,53 @@ export class Board {
     private boardChangeCallbacks: (() => void)[] = [];
     private readonly waiters: Map<string, Deferred<void>[]> = new Map();
     // Abstraction function:
-    //   TODO
+    //  AF(rows, cols, grid, players, boardChangeCallbacks, waiters) = 
+    //      A mutable, concurrent game board for a Memory Scramble game
+    //      consisting of `rows x cols` cells, where each cell may conain
+    //      a card (string value) or be empty (null). 
+    //
+    //      For each cell in grid[row][col]:
+    //          - cell.value is the card value (string) or null if removed
+    //          - cell.faceUp indicates whether the card is face up (true) or face down (false)
+    //          - cell.controlledBy is the ID of the player currently controlling the card, or null if uncontrolled
+    //
+    //      players maps each player ID to their current turn state:
+    //          - id is the player's unique identifier
+    //          - firstCard and secondCard store the positions of the cards the player has flipped this turn
+    //          - hasMatched indicates whether the player has found a matching pair this turn
+    //
+    //      boardChangeCallbacks stores functions to call when the board state changes.
+    //      These callbacks represent “watching” players.
+    //
+    //      waiters stores queues of players waiting to flip specific cards that are currently controlled by other players.
     // Representation invariant:
-    //   TODO
+    //   - rows > 0 and cols > 0
+    //   - grid has exactly `rows` rows and each row has exactly `cols` columns
+    //   - For each cell in grid:
+    //      - cell.value is defined (may be null for removed cards, but not undefined)
+    //      - if cell.value === null:
+    //          - cell.faceUp === false
+    //          - cell.controlledBy === null
+    //          (a removed card is face-down and uncontrolled)
+    //      - if cell.controlledBy !== null:
+    //          - cell.faceUp === true
+    //          - cell.value !== null
+    //          (a controlled card is face-up and has a value)
+    //   - Each player in `players` controls at most two cards.
+    //   - Every card's control belongs to at most one player.
+    //   - The grid and players maps are consistent with each other.
+    //   (if player.firstCard/secondCard points to a cell, that cell must be exist and have valid coordinates within the board bounds)
     // Safety from rep exposure:
-    //   TODO
+    //   - all fields are private
+    //   - internal mutable data (grid, players, waiters) are never returned directly
+    //   - parseFromFile creates a new Board instance with a deep copy of the parsed grid data
 
     /**
      * Constructor for Board
-     * @param rows - number of rows
-     * @param cols - number of columns
-     * @param grid - initial grid state
+     * 
+     * @param rows - number of rows; must be a nonnegative integer
+     * @param cols - number of columns; must be a nonnegative integer
+     * @param grid - initial grid state; a 2D array of strings representing card values
      */
     private constructor(rows: number, cols: number, grid: string[][]) {
         this.rows = rows;
@@ -68,7 +125,12 @@ export class Board {
 
         this.checkRep();
     }
-    // TODO checkRep
+    
+    /**
+     * Checks that the representation invariant holds.
+     *
+     * @throws an error if the representation invariant is violated.
+     */
     private checkRep(): void {
         assert(this.rows > 0, 'Number of rows must be positive');
         assert(this.cols > 0, 'Number of columns must be positive');
@@ -103,10 +165,19 @@ export class Board {
             }
             assert(controlledCount <= 2, 
                 `Player ${playerId} controls ${controlledCount} cards (max 2)`);
+
+            for (const cardPos of [player.firstCard, player.secondCard]) {
+                if (cardPos) {
+                    const { row: r, col: c } = cardPos;
+                    assert(r >= 0 && r < this.rows && c >= 0 && c < this.cols,
+                        `Player ${playerId} has card position out of bounds: (${r}, ${c})`);
+                }
+            }
         }
     }
-    // TODO other methods
+
     /**
+     * Provides the number of rows on the board.
      * 
      * @returns the number of rows on the board
      */
@@ -115,6 +186,7 @@ export class Board {
     }
 
     /**
+     * Provides the number of columns on the board.
      * 
      * @returns the number of columns on the board
      */
@@ -122,6 +194,20 @@ export class Board {
         return this.cols;
     }
 
+    public getCell(row: number, col: number): Cell | null {
+        if (row < 0 || row >= this.rows || col < 0 || col >= this.cols || this.grid[row] === undefined || this.grid[row][col] === undefined ) {
+            return null;
+        }
+        const c = this.grid[row]?.[col];
+        return c ? { value: c.value, faceUp: c.faceUp, controlledBy: c.controlledBy } : null;
+    }
+
+    /**
+     * Creates or retrieves a player by ID.
+     * 
+     * @param playerId - ID of the player; must be a nonempty string of alphanumeric or underscore characters
+     * @returns the player object (created or existing)
+     */
     private getPlayer(playerId: string): Player {
         if (!this.players.has(playerId)) {
             this.players.set(playerId, { id: playerId, hasMatched: false });
@@ -134,6 +220,13 @@ export class Board {
         return player;
     }
 
+    /**
+     * Looks at the current state of the board from the perspective of a player.
+     * 
+     * @spec Pre: playerId non-empty. Post: returns a string representation of the board from the perspective of the specified player.
+     * @param playerId - ID of the player; must be a nonempty string of alphanumeric or underscore characters
+     * @returns a string representation of the board from the perspective of the specified player
+     */
     public look(playerId: string): string {
         let result = `${this.rows}x${this.cols}\n`;
         for (const row of this.grid) {
@@ -152,13 +245,33 @@ export class Board {
         return result;
     }
 
+    /**
+     * Notifies all `watching` players of a board change.
+     * 
+     */
     private triggerBoardChange() : void {
         for (const cb of this.boardChangeCallbacks) {
-            cb();
+            try {
+                cb();
+            } catch (error) {
+                console.error('Error in board change callback:', error);
+            }
         }
         this.boardChangeCallbacks = [];
     }
 
+    /**
+     * A helper method to finish a player's previous turn.
+     * The method handles the logic for completing a player's previous turn by checking
+     * the cards they flipped and updating the board state accordingly.
+     * It applies the rules 3-A - 3-B of the game, i.e. removing matched cards or flipping back unmatched and uncontrolled cards.
+     * 
+     * @param player - the player whose previous turn is to be finished; must be a valid Player object
+     * @returns - nothing
+     * 
+     * @throws - an error if the player's stored card positions are invalid
+     *           (either out of bounds or the card is no longer available)
+     */
     private finishPreviousTurn(player: Player): void {
         const { firstCard, secondCard } = player;
         if (!firstCard || !secondCard) {
@@ -171,26 +284,6 @@ export class Board {
         if (!firstCell || !secondCell) {
             throw new Error('Invalid card positions stored for player');
         }
-
-        // if (firstCell.value && firstCell.value === secondCell.value) {
-        //     // 3 - A match found
-        //     firstCell.value = null;
-        //     firstCell.faceUp = false;
-        //     firstCell.controlledBy = player.id;
-
-        //     secondCell.value = null;
-        //     secondCell.faceUp = false;
-        //     secondCell.controlledBy = player.id;
-        // } else {
-        //     // 3 - B flip back unmatched cards
-        //     if (firstCell.faceUp && !firstCell.controlledBy) {
-        //         firstCell.faceUp = false;
-        //     }
-        //     if (secondCell.faceUp && !secondCell.controlledBy) {
-        //         secondCell.faceUp = false;
-        //     }
-        // }
-
         if (player.hasMatched && firstCell.value !== null && secondCell.value !== null && firstCell.value === secondCell.value) {
             // 3 - A match found - remove the matched cards
             firstCell.value = null;
@@ -202,10 +295,16 @@ export class Board {
         } else {
             // 3 - B flip back unmatched cards
             if (firstCell.value !== null && firstCell.faceUp && firstCell.controlledBy === null) {
-                firstCell.faceUp = false;
+                if (!this.isRemembered(firstCard.row, firstCard.col, player.id)) {
+                    firstCell.faceUp = false;
+                }
+                // firstCell.faceUp = false;
             }
             if (secondCell.value !== null && secondCell.faceUp && secondCell.controlledBy === null) {
-                secondCell.faceUp = false;
+                if (!this.isRemembered(secondCard.row, secondCard.col, player.id)) {
+                    secondCell.faceUp = false;
+                }
+                // secondCell.faceUp = false;
             }
         }
 
@@ -214,6 +313,44 @@ export class Board {
         player.hasMatched = false;
     }
 
+    /**
+     * Helper method to check if a card at (row, col) is remembered by any other player, 
+     * other than the current player passed as an argument.
+     * 
+     * @param row - the row index of the card to check; 
+     *              must be a nonnegative integer less than the number of rows on the board
+     * @param col - the column index of the card to check; 
+     *              must be a nonnegative integer less than the number of columns on the board
+     * @param currentPlayer - the ID of the player to exclude from the check; 
+     *                        must be a nonempty string of alphanumeric or underscore characters
+     * @returns - true if the card is remembered by any other player, false otherwise
+     */
+    private isRemembered(row: number, col: number, currentPlayer: string): boolean {
+        for (const [playerId, player] of this.players) {
+            if (playerId === currentPlayer) continue;
+            if (player.firstCard && player.firstCard.row === row && player.firstCard.col === col) {
+                return true;
+            }
+            if (player.secondCard && player.secondCard.row === row && player.secondCard.col === col) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * A helper method for the main flip() function.
+     * The method handles the logic for flipping the player's first card on the board and
+     * implements the 1-A - 1-D steps of the game rules.
+     * 
+     * @param player - the player attempting a first card flip; must be a valid Player object
+     * @param row - the row index of the card to flip;  must be a nonnegative integer less than the number of rows on the board
+     * @param col - the column index of the card to flip; must be a nonnegative integer less than the number of columns on the board
+     * @returns - a promise that resolves when the flip action is complete
+     * 
+     * @throws - an error if the flip action cannot be completed due to game rules 
+     *          (e.g., flipping a card that is no longer available (null value))
+     */
     private async flipFirst(player: Player, row: number, col: number): Promise<void> {
         if (player.firstCard) {
             throw new Error('First card already flipped');
@@ -239,6 +376,7 @@ export class Board {
             this.waiters.set(key, queue);
             
             // Wait until relinquishControl wakes up
+            // console.log(`Player ${player.id} is waiting to flip card at (${row}, ${col})`);
             await deferred.promise;
             
             // re-checking the cell
@@ -252,10 +390,23 @@ export class Board {
             current.controlledBy = player.id;
             player.firstCard = { row, col };
         }
+        // console.log(`Player ${player.id} successfully flipped first card at (${row}, ${col})`);
         return;
     }
 
-
+    /**
+     * A helper method for the main flip() function.
+     * The method handles the logic for flipping the player's second card on the board and
+     * implements the 2-A - 2-E steps of the game rules.
+     * 
+     * @param player - the player attempting a second card flip; must be a valid Player object
+     * @param row - the row index of the card to flip;  must be a nonnegative integer less than the number of rows on the board
+     * @param col - the column index of the card to flip; must be a nonnegative integer less than the number of columns on the board
+     * @returns - a promise that resolves when the flip action is complete
+     *
+     * @throws - an error if the flip action cannot be completed due to game rules
+     *         (e.g., flipping a card that is already controlled by another player)
+     */
     private async flipSecond(player: Player, row: number, col: number): Promise<void> {
         if (!player.firstCard || player.secondCard) {
             throw new Error(`The player has not flipped a first card or has already flipped a second card`);
@@ -304,9 +455,21 @@ export class Board {
             this.relinquishControl({ row, col });
             player.hasMatched = false;
         }
+        // console.log(`Player ${player.id} successfully flipped second card at (${row}, ${col})`);
         return;
     }
 
+    /**
+     * A helper method to relinquish control of a card at a given position.
+     * Checks if there are any players waiting on the card. 
+     * If so, if the card is relinquished with wakeAll=true (the card was removed), 
+     * all waiters are woken up. Otherwise, only the next waiter is woken up,
+     * thus giving them control of the card.
+     * 
+     * @param cardPos - the position (row and column) of the card to relinquish control of; must be a valid position on the board
+     * @param wakeAll - if true, all waiters for this card are woken up; otherwise, only the next waiter is woken up
+     * @returns - void
+     */
     private relinquishControl(cardPos: { row: number; col: number }, wakeAll = false): void {
         const cell = this.grid[cardPos.row]?.[cardPos.col];
         if (!cell) return;
@@ -328,7 +491,7 @@ export class Board {
                     throw new Error('Expected waiter in queue but found none');
                 }
                 nextWaiter.resolve();
-                
+
                 if (queue.length === 0) {
                     this.waiters.delete(key);
                 }
@@ -336,7 +499,21 @@ export class Board {
         }
     }
 
+    /**
+     * Main method to flip a card on the board. 
+     * The method first calls finishPreviousTurn to complete any unfinished turns for the player.
+     * If the player has not flipped a first card yet, it calls flipFirst to handle the first card flip logic.
+     * If the player has already flipped a first card, it calls flipSecond to handle the second card flip logic.
+     * Finally, it triggers board change notifications and checks the representation invariant.
+     * 
+     * @spec Pre: playerId non-empty, row and col within board bounds. Post: flips the specified card for the player, following game rules.
+     * @param playerId - ID of the player making the flip; must be a nonempty string of alphanumeric or underscore characters
+     * @param row - row number of card to flip; must be a nonnegative integer less than the number of rows on the board
+     * @param col - column number of card to flip; must be a nonnegative integer less than the number of columns on the board
+     * @returns - a promise that resolves when the flip action is complete
+     */
     public async flip(playerId: string, row: number, col: number): Promise<void> {
+        // assert(false, "Intentional crash for testing");
         const player = this.getPlayer(playerId);
         // console.log(`Player ${playerId} is flipping card at (${row}, ${col})`);
 
@@ -352,13 +529,27 @@ export class Board {
         this.checkRep();
     }
 
-    public async watch(playerId: string): Promise<string> {
+    /**
+     * The method allows a player to watch the board for changes.
+     * 
+     * @param playerId - ID of the player watching the board; must be a nonempty string of alphanumeric or underscore characters
+     */
+    public async watch(playerId: string): Promise<void> {
         return new Promise(resolve => {
-            this.boardChangeCallbacks.push(() => resolve(this.look(playerId)));
+            this.boardChangeCallbacks.push(() => resolve());
         });
     }
 
-    public async map(playerId: string, f: (card: string) => Promise<string>): Promise<void> {
+    /**
+     * The method modifies the board by applying an asynchronous function to each unique card value on the board.
+     * The function does not block player actions while it is being applied. It also does
+     * not not prevent other commands on the board from interleaving with it while it is running.
+     * 
+     * @spec Pre: f is a valid function. Post: applies f to each unique card on the board, updating their values.
+     * @param f - mathematical function from cards to cards
+     * @returns - a promise that resolves when the map action is complete
+     */
+    public async map(f: (card: string) => Promise<string>): Promise<void> {
         const valueMap = new Map<string, Promise<string>>();
 
         for (const row of this.grid) {
@@ -428,8 +619,6 @@ export class Board {
             const cols = parseInt(match[2], 10);
 
             const gridLines = lines.slice(1);
-            assert(gridLines.length === rows * cols, `Expected ${rows * cols} cards, found ${gridLines.length}`);
-
             const grid: string[][] = [];
             for (let r = 0; r < rows; r++) {
                 const row: string [] = [];
@@ -442,8 +631,9 @@ export class Board {
                 }
                 grid.push(row);
             }
-
-            return new Board(rows, cols, grid);
+            const board = new Board(rows, cols, grid);
+            board.checkRep();
+            return board;
         } catch (err) {
             throw new Error(`Could not read or parse board file: ${err}`);
         }

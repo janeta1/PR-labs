@@ -18,68 +18,87 @@ async function simulationMain(): Promise<void> {
     const board: Board = await Board.parseFromFile(filename);
     const size = 3;
     const players = 4;
-    const tries = 10;
-    const maxDelayMilliseconds = 100;
+    const tries = 100;
+    const minDelay = 0.1;
+    const maxDelay = 2.0;
 
-    // Print initial board state
-    console.log('=== INITIAL BOARD ===');
-    console.log(board.look('observer'));
-    console.log('');
-
-    // start up one or more players as concurrent asynchronous function calls
+    const stats: {
+        movesCompleted: number; // completed turns (successful second flip)
+        flipsAttempted: number; // attempts (first+second)
+        startTimeMs?: number;
+        endTimeMs?: number;
+    }[] = Array.from({ length: players }, () => ({ movesCompleted: 0, flipsAttempted: 0 }));
+    
+    const mainStart = performance.now();
     const playerPromises: Array<Promise<void>> = [];
     for (let ii = 0; ii < players; ++ii) {
         playerPromises.push(player(ii));
     }
-    // wait for all the players to finish (unless one throws an exception)
+    // wait for all the players to finish
     await Promise.all(playerPromises);
-    
-    // Print final board state
+    const mainEnd = performance.now();
+
     console.log('=== FINAL BOARD ===');
     console.log(board.look('observer'));
-    console.log('Game complete!');
+    console.log('=== Simulation Statistics ===');
+    for (let p = 0; p < players; p++) {
+        const s = stats[p];
+        const duration = (s!.endTimeMs! - s!.startTimeMs!);
+        console.log(`Player ${p}: Duration = ${duration.toFixed(2)} ms, Moves Completed = ${s!.movesCompleted}, Flips Attempted = ${s!.flipsAttempted}`);
+    }
+    console.log(`Total Simulation Time: ${(mainEnd - mainStart).toFixed(2)} ms`);
 
     /** @param playerNumber player to simulate */
     async function player(playerNumber: number): Promise<void> {
         // TODO set up this player on the board if necessary
+        const playerId = `player${playerNumber}`;
+        if (!stats[playerNumber]) {
+            stats[playerNumber] = { movesCompleted: 0, flipsAttempted: 0 };
+        }
+        stats[playerNumber].startTimeMs = performance.now();
 
         for (let jj = 0; jj < tries; ++jj) {
             try {
-                await timeout(Math.random() * maxDelayMilliseconds);
+                await timeout(minDelay + Math.random() * (maxDelay - minDelay));
                 // TODO try to flip over a first card at (randomInt(size), randomInt(size))
                 //      which might wait until this player can control that card
-                const firstRow = randomInt(size);
-                const firstCol = randomInt(size);
+                const sizeRows = board.getRows();
+                const sizeCols = board.getCols();
+                const firstRow = randomInt(sizeRows);
+                const firstCol = randomInt(sizeCols);
                 try {
-                    console.log(`\nPlayer ${playerNumber} attempting first flip at (${firstRow}, ${firstCol})`);
+                    stats[playerNumber].flipsAttempted += 1;
+                    // console.log(`\nPlayer ${playerNumber} attempting first flip at (${firstRow}, ${firstCol})`);
                     await board.flip(`player${playerNumber}`, firstRow, firstCol);
-                    console.log(`Player ${playerNumber} successfully flipped first card`);
+                    // console.log(`Player ${playerNumber} successfully flipped first card`);
                 } catch (err) {
-                    console.error('attempt to flip a card failed:', err);
+                    // console.error('attempt to flip a card failed:', err);
                     continue;
                 }
 
-                await timeout(Math.random() * maxDelayMilliseconds);
+                await timeout(minDelay + Math.random() * (maxDelay - minDelay));
                 // TODO and if that succeeded,
                 //      try to flip over a second card at (randomInt(size), randomInt(size))
-                const secondRow = randomInt(size);
-                const secondCol = randomInt(size);
+                const secondRow = randomInt(sizeRows);
+                const secondCol = randomInt(sizeCols);
                 try {
-                    console.log(`Player ${playerNumber} attempting second flip at (${secondRow}, ${secondCol})`);
+                    stats[playerNumber].flipsAttempted += 1;
+                    // console.log(`Player ${playerNumber} attempting second flip at (${secondRow}, ${secondCol})`);
                     await board.flip(`player${playerNumber}`, secondRow, secondCol);
-                    console.log(`Player ${playerNumber} successfully flipped second card`);
+                    stats[playerNumber].movesCompleted += 1;
+                    // console.log(`Player ${playerNumber} successfully flipped second card`);
                     
-                    // Print board state after each complete turn
-                    console.log('--- Board State ---');
-                    console.log(board.look(`player${playerNumber}`));
                 } catch (err) {
-                    console.error('attempt to flip a card failed:', err);
+                    // console.error('attempt to flip a card failed:', err);
                     continue;
-                }         
+                }  
+                
             } catch (err) {
-                console.error('attempt to flip a card failed:', err);
+                // console.error('attempt to flip a card failed:', err);
+                continue;
             }
         }
+        stats[playerNumber].endTimeMs = performance.now();
     }
 }
 

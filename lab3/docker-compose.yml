@@ -1,0 +1,15 @@
+version: "3.8"
+services:
+  server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: pr_lab3
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./:/usr/src/app:cached
+    working_dir: /usr/src/app
+    # Use array form so arguments are passed reliably. The board file path should be
+    # relative to the project root mounted into the container (./boards/zoom.txt).
+    command: ["npm", "run", "start", "--", "8080", "./boards/zoom.txt"]
