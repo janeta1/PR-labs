@@ -295,16 +295,16 @@ export class Board {
         } else {
             // 3 - B flip back unmatched cards
             if (firstCell.value !== null && firstCell.faceUp && firstCell.controlledBy === null) {
-                if (!this.isRemembered(firstCard.row, firstCard.col, player.id)) {
-                    firstCell.faceUp = false;
-                }
-                // firstCell.faceUp = false;
+                // if (!this.isRemembered(firstCard.row, firstCard.col, player.id)) {
+                //     firstCell.faceUp = false;
+                // }
+                firstCell.faceUp = false;
             }
             if (secondCell.value !== null && secondCell.faceUp && secondCell.controlledBy === null) {
-                if (!this.isRemembered(secondCard.row, secondCard.col, player.id)) {
-                    secondCell.faceUp = false;
-                }
-                // secondCell.faceUp = false;
+                // if (!this.isRemembered(secondCard.row, secondCard.col, player.id)) {
+                //     secondCell.faceUp = false;
+                // }
+                secondCell.faceUp = false;
             }
         }
 
