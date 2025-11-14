@@ -419,6 +419,7 @@ export class Board {
             this.relinquishControl(firstCard);
             player.secondCard = { row, col };
             player.hasMatched = false;
+            this.checkRep();
             this.triggerBoardChange();
             throw new Error(`No card at position (${row}, ${col})`);
         }
@@ -428,6 +429,7 @@ export class Board {
             this.relinquishControl(firstCard);
             player.secondCard = { row, col };
             player.hasMatched = false;
+            this.checkRep();
             this.triggerBoardChange();
             throw new Error(`Card at position (${row}, ${col}) is already controlled by a player`);
         }
@@ -525,8 +527,8 @@ export class Board {
             await this.flipFirst(player, row, col);
         }
 
-        this.triggerBoardChange();
         this.checkRep();
+        this.triggerBoardChange();
     }
 
     /**
@@ -581,9 +583,8 @@ export class Board {
                 }
             }
         }
-
-        this.triggerBoardChange(); // dont know if all players need to be notified here
         this.checkRep();
+        this.triggerBoardChange(); // dont know if all players need to be notified here
     }
 
 

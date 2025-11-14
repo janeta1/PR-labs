@@ -53,7 +53,7 @@ async function simulationMain(): Promise<void> {
         console.log(`  Duration: ${duration.toFixed(2)} ms`);
         console.log(`  Flips Attempted: ${s!.flipsAttempted}`);
         console.log(`  Failed Flips: ${s!.failedFlips}`);
-        console.log(`  Successful Matches: ${s!.successfulMatches}`);
+        console.log(`  Matches completed: ${s!.successfulMatches}`);
         console.log(`  Errors on first flip:`);
 
         if (s!.errors.first.size === 0) {
