@@ -26,9 +26,9 @@ async function simulationMain(): Promise<void> {
         failedFlips: number; // failed attempts
         successfulMatches?: number; // successful matches
         errors: {
-        first: Map<string, number>;
-        second: Map<string, number>;
-    };
+            first: Map<string, number>;
+            second: Map<string, number>;
+        };
 
         startTimeMs?: number;
         endTimeMs?: number;

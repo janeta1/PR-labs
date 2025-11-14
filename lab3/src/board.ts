@@ -104,8 +104,6 @@ export class Board {
     //          (a controlled card is face-up and has a value)
     //   - Each player in `players` controls at most two cards.
     //   - Every card's control belongs to at most one player.
-    //   - The grid and players maps are consistent with each other.
-    //   (if player.firstCard/secondCard points to a cell, that cell must be exist and have valid coordinates within the board bounds)
     // Safety from rep exposure:
     //   - all fields are private
     //   - internal mutable data (grid, players, waiters) are never returned directly
@@ -369,6 +367,9 @@ export class Board {
             player.firstCard = { row, col };
         } else {
             // 1 - D: card face up and controlled by another player -> wait in FIFO queue
+            // this.finishPreviousTurn(player);
+            // this.checkRep();
+            // this.triggerBoardChange();
             const key = `${row},${col}`;
             const deferred = new Deferred<void>();
             const queue = this.waiters.get(key) ?? [];
