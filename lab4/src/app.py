@@ -24,7 +24,6 @@ FOLLOWERS = os.getenv("FOLLOWERS", "").split(",") if ROLE == "leader" else []
 
 
 WRITE_QUORUM = int(os.getenv("WRITE_QUORUM", 1))
-quorum_lock = threading.Lock()
 
 MIN_DELAY = float(os.getenv("MIN_DELAY", 0))
 MAX_DELAY = float(os.getenv("MAX_DELAY", 1000))
