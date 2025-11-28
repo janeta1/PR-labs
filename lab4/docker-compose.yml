@@ -1,0 +1,54 @@
+services:
+
+  leader:
+    build: .
+    container_name: leader
+    environment:
+      - ROLE=leader
+      - FOLLOWERS=http://follower1:5000,http://follower2:5000,http://follower3:5000,http://follower4:5000,http://follower5:5000
+      - WRITE_QUORUM=${WRITE_QUORUM:-1}
+      - MIN_DELAY=0
+      - MAX_DELAY=1000
+    ports:
+      - "5000:5000"
+
+  follower1:
+    build: .
+    container_name: follower1
+    environment:
+      - ROLE=follower
+    ports:
+      - "5001:5000"
+
+  follower2:
+    build: .
+    container_name: follower2
+    environment:
+      - ROLE=follower
+    ports:
+      - "5002:5000"
+
+  follower3:
+    build: .
+    container_name: follower3
+    environment:
+      - ROLE=follower
+    ports:
+      - "5003:5000"
+
+  follower4:
+    build: .
+    container_name: follower4
+    environment:
+      - ROLE=follower
+    ports:
+      - "5004:5000"
+
+  follower5:
+    build: .
+    container_name: follower5
+    environment:
+      - ROLE=follower
+    ports:
+      - "5005:5000"
+
